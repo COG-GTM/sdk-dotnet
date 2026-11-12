@@ -1014,6 +1014,14 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
         logger.LogDebug(
             "Activities:\n{Activities}",
             string.Join("\n", DumpActivities(activities)));
+        // Per-span tag assertions only check tags that are present, so explicitly require the
+        // default namespace tag on every SDK-created span
+        if (tracingOptions == null)
+        {
+            Assert.All(
+                activities.Where(a => a.Source.Name != TracingWorkflow.CustomSource.Name),
+                a => Assert.Equal(Client.Options.Namespace, a.GetTagItem("temporalNamespace")));
+        }
         return activities;
     }
 
