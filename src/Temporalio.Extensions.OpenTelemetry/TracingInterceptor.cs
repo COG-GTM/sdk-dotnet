@@ -13,6 +13,7 @@ using Temporalio.Client;
 using Temporalio.Client.Interceptors;
 using Temporalio.Converters;
 using Temporalio.Exceptions;
+using Temporalio.Nexus;
 using Temporalio.Worker.Interceptors;
 using Temporalio.Workflows;
 
@@ -167,6 +168,21 @@ namespace Temporalio.Extensions.OpenTelemetry
         }
 
         /// <summary>
+        /// Create tag collection for the given namespace.
+        /// </summary>
+        /// <param name="ns">Namespace.</param>
+        /// <returns>Tags.</returns>
+        protected virtual IEnumerable<KeyValuePair<string, object?>> CreateNamespaceTags(
+            string ns)
+        {
+            if (Options.TagNameNamespace is string name)
+            {
+                return new KeyValuePair<string, object?>[] { new(name, ns) };
+            }
+            return Enumerable.Empty<KeyValuePair<string, object?>>();
+        }
+
+        /// <summary>
         /// Create tag collection for the given workflow ID.
         /// </summary>
         /// <param name="workflowId">Workflow ID.</param>
@@ -211,7 +227,11 @@ namespace Temporalio.Extensions.OpenTelemetry
         {
             var info = Workflow.Info;
             // Can't just append to other enumerable, Append is >= 4.7.1 only
-            var ret = new List<KeyValuePair<string, object?>>(2);
+            var ret = new List<KeyValuePair<string, object?>>(3);
+            if (Options.TagNameNamespace is string nsName)
+            {
+                ret.Add(new(nsName, info.Namespace));
+            }
             if (Options.TagNameWorkflowId is string wfName)
             {
                 ret.Add(new(wfName, info.WorkflowId));
@@ -231,7 +251,11 @@ namespace Temporalio.Extensions.OpenTelemetry
         protected virtual IEnumerable<KeyValuePair<string, object?>> CreateInActivityTags()
         {
             var info = ActivityExecutionContext.Current.Info;
-            var ret = new List<KeyValuePair<string, object?>>(3);
+            var ret = new List<KeyValuePair<string, object?>>(4);
+            if (Options.TagNameNamespace is string nsName)
+            {
+                ret.Add(new(nsName, info.Namespace));
+            }
             if (Options.TagNameWorkflowId is string wfName)
             {
                 ret.Add(new(wfName, info.WorkflowId));
@@ -292,7 +316,7 @@ namespace Temporalio.Extensions.OpenTelemetry
                     $"{namePrefix}:{input.Workflow}",
                     kind: ActivityKind.Client,
                     parentContext: default,
-                    tags: root.CreateWorkflowTags(input.Options.Id!)))
+                    tags: CreateClientTags(root.CreateWorkflowTags(input.Options.Id!))))
                 {
                     if (HeadersFromContext(input.Headers) is Dictionary<string, Payload> headers)
                     {
@@ -323,9 +347,9 @@ namespace Temporalio.Extensions.OpenTelemetry
                     $"UpdateWithStartWorkflow:{input.Options.StartWorkflowOperation.Workflow}",
                     kind: ActivityKind.Client,
                     parentContext: default,
-                    tags: root.CreateUpdateTags(
+                    tags: CreateClientTags(root.CreateUpdateTags(
                         workflowId: input.Options.StartWorkflowOperation.Options.Id!,
-                        updateId: input.Options.Id)))
+                        updateId: input.Options.Id))))
                 {
                     // We want the header on _both_ start and update
                     if (HeadersFromContext(input.Headers) is Dictionary<string, Payload> updateHeaders)
@@ -358,7 +382,7 @@ namespace Temporalio.Extensions.OpenTelemetry
                     $"SignalWorkflow:{input.Signal}",
                     kind: ActivityKind.Client,
                     parentContext: default,
-                    tags: root.CreateWorkflowTags(input.Id)))
+                    tags: CreateClientTags(root.CreateWorkflowTags(input.Id))))
                 {
                     if (HeadersFromContext(input.Headers) is Dictionary<string, Payload> headers)
                     {
@@ -382,7 +406,7 @@ namespace Temporalio.Extensions.OpenTelemetry
                     $"QueryWorkflow:{input.Query}",
                     kind: ActivityKind.Client,
                     parentContext: default,
-                    tags: root.CreateWorkflowTags(input.Id)))
+                    tags: CreateClientTags(root.CreateWorkflowTags(input.Id))))
                 {
                     if (HeadersFromContext(input.Headers) is Dictionary<string, Payload> headers)
                     {
@@ -407,7 +431,7 @@ namespace Temporalio.Extensions.OpenTelemetry
                     $"UpdateWorkflow:{input.Update}",
                     kind: ActivityKind.Client,
                     parentContext: default,
-                    tags: root.CreateUpdateTags(workflowId: input.Id, updateId: input.Options.Id)))
+                    tags: CreateClientTags(root.CreateUpdateTags(workflowId: input.Id, updateId: input.Options.Id))))
                 {
                     if (HeadersFromContext(input.Headers) is Dictionary<string, Payload> headers)
                     {
@@ -432,7 +456,7 @@ namespace Temporalio.Extensions.OpenTelemetry
                     $"StartActivity:{input.Activity}",
                     kind: ActivityKind.Client,
                     parentContext: default,
-                    tags: input.Options.Id is string id ? root.CreateStandaloneActivityTags(id) : null))
+                    tags: CreateClientTags(input.Options.Id is string id ? root.CreateStandaloneActivityTags(id) : null)))
                 {
                     if (HeadersFromContext(input.Headers) is Dictionary<string, Payload> headers)
                     {
@@ -448,6 +472,17 @@ namespace Temporalio.Extensions.OpenTelemetry
                         throw;
                     }
                 }
+            }
+
+            private List<KeyValuePair<string, object?>> CreateClientTags(
+                IEnumerable<KeyValuePair<string, object?>>? tags)
+            {
+                var ret = root.CreateNamespaceTags(Namespace).ToList();
+                if (tags != null)
+                {
+                    ret.AddRange(tags);
+                }
+                return ret;
             }
 
             /// <summary>
@@ -870,7 +905,9 @@ namespace Temporalio.Extensions.OpenTelemetry
                     using (var activity = NexusSource.StartActivity(
                         $"RunStartNexusOperationHandler:{input.Context.Service}/{input.Context.Operation}",
                         kind: ActivityKind.Server,
-                        parentContext: parentContext))
+                        parentContext: parentContext,
+                        tags: root.CreateNamespaceTags(
+                            NexusOperationExecutionContext.Current.Info.Namespace)))
                     {
                         try
                         {
@@ -904,7 +941,9 @@ namespace Temporalio.Extensions.OpenTelemetry
                     using (var activity = NexusSource.StartActivity(
                         $"RunCancelNexusOperationHandler:{input.Context.Service}/{input.Context.Operation}",
                         kind: ActivityKind.Server,
-                        parentContext: parentContext))
+                        parentContext: parentContext,
+                        tags: root.CreateNamespaceTags(
+                            NexusOperationExecutionContext.Current.Info.Namespace)))
                     {
                         try
                         {

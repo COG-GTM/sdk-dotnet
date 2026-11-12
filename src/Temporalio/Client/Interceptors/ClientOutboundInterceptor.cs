@@ -30,8 +30,19 @@ namespace Temporalio.Client.Interceptors
             MaybeNext ?? throw new InvalidOperationException("No next interceptor");
 
         /// <summary>
+        /// Gets the namespace of the client this interceptor chain was created for.
+        /// </summary>
+        protected string Namespace => MaybeNext is { } next ? next.Namespace : RootNamespace;
+
+        /// <summary>
         /// Gets the next interceptor in the chain if any.
         /// </summary>
         private protected ClientOutboundInterceptor? MaybeNext { get; init; }
+
+        /// <summary>
+        /// Gets the namespace for the interceptor at the root of the chain.
+        /// </summary>
+        private protected virtual string RootNamespace =>
+            throw new InvalidOperationException("No next interceptor");
     }
 }

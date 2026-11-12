@@ -162,6 +162,9 @@ namespace Temporalio.Client
             /// Gets the client.
             /// </summary>
             internal TemporalClient Client { get; init; }
+
+            /// <inheritdoc />
+            private protected override string RootNamespace => Client.Options.Namespace;
         }
     }
 }
