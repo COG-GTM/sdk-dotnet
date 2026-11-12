@@ -70,11 +70,12 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
             });
 
         // Check activities
-        var workflowTags = new[] { ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
+        var workflowTags = new[] { NamespaceTag, ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
         var workflowRunTags = workflowTags.Append(
             ActivityAssertion.TagEqual("temporalRunID", handle.ResultRunId!)).ToArray();
         var workflowChildRunTags = new[]
         {
+            NamespaceTag,
             ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id + "_child"),
             ActivityAssertion.TagNotEqual("temporalRunID", handle.ResultRunId!),
         };
@@ -248,7 +249,7 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
         // Simple workflow task failure
         var (handle, activities) = await ExecuteTracingWorkflowAsync(
             new(new TracingWorkflowAction[] { new(FailOnNonReplay: "fail1") }));
-        var workflowTags = new[] { ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
+        var workflowTags = new[] { NamespaceTag, ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
         var workflowRunTags = workflowTags.Append(
             ActivityAssertion.TagEqual("temporalRunID", handle.ResultRunId!)).ToArray();
         AssertActivities(
@@ -287,13 +288,14 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
                 Param: new(Array.Empty<TracingWorkflowAction>()),
                 FailOnNonReplayBeforeComplete: "fail4")),
         }));
-        workflowTags = new[] { ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
+        workflowTags = new[] { NamespaceTag, ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
         workflowRunTags = workflowTags.Append(
             ActivityAssertion.TagEqual("temporalRunID", handle.ResultRunId!)).ToArray();
         var activityRunTags = workflowRunTags.Append(
             ActivityAssertion.TagEqual("temporalActivityID", "1")).ToArray();
         var workflowChildRunTags = new[]
         {
+            NamespaceTag,
             ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id + "_child"),
             ActivityAssertion.TagNotEqual("temporalRunID", handle.ResultRunId!),
         };
@@ -377,7 +379,7 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
             },
             expectFail: true,
             terminate: true);
-        workflowTags = new[] { ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
+        workflowTags = new[] { NamespaceTag, ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
         workflowRunTags = workflowTags.Append(
             ActivityAssertion.TagEqual("temporalRunID", handle.ResultRunId!)).ToArray();
         // Remove duplicate activities since task failure causes retry
@@ -424,7 +426,7 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
         var (handle, activities) = await ExecuteTracingWorkflowAsync(
             new(new TracingWorkflowAction[] { new(AppFail: "fail1") }),
             expectFail: true);
-        var workflowTags = new[] { ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
+        var workflowTags = new[] { NamespaceTag, ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
         var workflowRunTags = workflowTags.Append(
             ActivityAssertion.TagEqual("temporalRunID", handle.ResultRunId!)).ToArray();
         AssertActivities(
@@ -451,7 +453,7 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
             new(new TracingWorkflowAction[] { new(WaitUntilSignalCount: 1) }),
             afterStart: handle => handle.SignalAsync(wf => wf.SignalFailureAsync("fail2")),
             expectFail: true);
-        workflowTags = new[] { ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
+        workflowTags = new[] { NamespaceTag, ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
         workflowRunTags = workflowTags.Append(
             ActivityAssertion.TagEqual("temporalRunID", handle.ResultRunId!)).ToArray();
         AssertActivities(
@@ -491,7 +493,7 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
             new(Array.Empty<TracingWorkflowAction>()),
             afterStart: handle => Assert.ThrowsAsync<WorkflowQueryFailedException>(() =>
                 handle.QueryAsync(wf => wf.QueryFailure("fail3"))));
-        workflowTags = new[] { ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
+        workflowTags = new[] { NamespaceTag, ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
         workflowRunTags = workflowTags.Append(
             ActivityAssertion.TagEqual("temporalRunID", handle.ResultRunId!)).ToArray();
         AssertActivities(
@@ -536,7 +538,7 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
                     handle.ExecuteUpdateAsync(wf => wf.UpdateFailureAsync("fail4")));
                 await handle.SignalAsync(wf => wf.Signal1Async());
             });
-        workflowTags = new[] { ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
+        workflowTags = new[] { NamespaceTag, ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
         workflowRunTags = workflowTags.Append(
             ActivityAssertion.TagEqual("temporalRunID", handle.ResultRunId!)).ToArray();
         AssertActivities(
@@ -602,7 +604,7 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
                     handle.ExecuteUpdateAsync(wf => wf.UpdateValidatorFailureAsync("fail5")));
                 await handle.SignalAsync(wf => wf.Signal1Async());
             });
-        workflowTags = new[] { ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
+        workflowTags = new[] { NamespaceTag, ActivityAssertion.TagEqual("temporalWorkflowID", handle.Id) };
         workflowRunTags = workflowTags.Append(
             ActivityAssertion.TagEqual("temporalRunID", handle.ResultRunId!)).ToArray();
         AssertActivities(
@@ -841,6 +843,8 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
             a => a.OperationName == "StartWorkflow:TracingWorkflow" &&
                 a.ParentSpanId == nexusHandler.SpanId);
         Assert.Equal(nexusHandler.TraceId, nexusStartedWorkflow.TraceId);
+        Assert.Equal(Client.Options.Namespace, nexusHandler.GetTagItem("temporalNamespace"));
+        Assert.Equal(Client.Options.Namespace, nexusStartedWorkflow.GetTagItem("temporalNamespace"));
     }
 
     [Fact]
@@ -858,10 +862,39 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
                 });
         });
 
-        var activityTags = new[] { ActivityAssertion.TagEqual("temporalActivityID", activityId) };
+        var activityTags = new[] { NamespaceTag, ActivityAssertion.TagEqual("temporalActivityID", activityId) };
         AssertActivities(
             spans,
             new ActivityAssertion("StartActivity:TestStandaloneActivitySpans", Parent: null, Tags: activityTags));
+    }
+
+    [Fact]
+    public async Task TracingInterceptor_NamespaceTagName_IsConfigurable()
+    {
+        var (_, activities) = await ExecuteTracingWorkflowAsync(
+            new(new[] { new TracingWorkflowAction(Activity: new(Param: new())) }),
+            tracingOptions: new() { TagNameNamespace = "customNamespace" });
+        Assert.Equal(
+            new[]
+            {
+                "StartWorkflow:TracingWorkflow",
+                "RunWorkflow:TracingWorkflow",
+                "StartActivity:TracingActivity",
+                "RunActivity:TracingActivity",
+                "CompleteWorkflow:TracingWorkflow",
+            }.OrderBy(n => n),
+            activities.Select(a => a.OperationName).OrderBy(n => n));
+        Assert.All(activities, a =>
+        {
+            Assert.Equal(Client.Options.Namespace, a.GetTagItem("customNamespace"));
+            Assert.Null(a.GetTagItem("temporalNamespace"));
+        });
+
+        (_, activities) = await ExecuteTracingWorkflowAsync(
+            new(new[] { new TracingWorkflowAction(Activity: new(Param: new())) }),
+            tracingOptions: new() { TagNameNamespace = null });
+        Assert.NotEmpty(activities);
+        Assert.All(activities, a => Assert.Null(a.GetTagItem("temporalNamespace")));
     }
 
     private static void AssertActivities(
@@ -914,7 +947,8 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
         Func<WorkflowHandle<TracingWorkflow>, Task>? afterStart = null,
         Action<TemporalWorkerOptions>? prepareWorkerOptions = null,
         bool expectFail = false,
-        bool terminate = false)
+        bool terminate = false,
+        TracingInterceptorOptions? tracingOptions = null)
     {
         WorkflowHandle<TracingWorkflow>? handle = null;
         var activities = await WithTracingWorkerAsync(
@@ -942,13 +976,15 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
                     await handle.GetResultAsync();
                 }
             },
-            prepareWorkerOptions);
+            prepareWorkerOptions,
+            tracingOptions);
         return (handle!, activities);
     }
 
     private async Task<IReadOnlyCollection<Activity>> WithTracingWorkerAsync(
         Func<ITemporalClient, TemporalWorker, Task> run,
-        Action<TemporalWorkerOptions>? prepareWorkerOptions = null)
+        Action<TemporalWorkerOptions>? prepareWorkerOptions = null,
+        TracingInterceptorOptions? tracingOptions = null)
     {
         var activities = new List<Activity>();
 
@@ -965,7 +1001,7 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
 
         // Create a client with the interceptor
         var newOptions = (TemporalClientOptions)Client.Options.Clone();
-        newOptions.Interceptors = new[] { new TracingInterceptor() };
+        newOptions.Interceptors = new[] { new TracingInterceptor(tracingOptions) };
         var client = new TemporalClient(Client.Connection, newOptions);
 
         // Run with worker
@@ -980,6 +1016,9 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
             string.Join("\n", DumpActivities(activities)));
         return activities;
     }
+
+    private Action<KeyValuePair<string, string?>> NamespaceTag =>
+        ActivityAssertion.TagEqual("temporalNamespace", Client.Options.Namespace);
 
     public record ActivityAssertion(
         string Name,

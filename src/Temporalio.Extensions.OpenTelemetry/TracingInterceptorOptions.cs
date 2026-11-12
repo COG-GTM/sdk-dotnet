@@ -19,6 +19,11 @@ namespace Temporalio.Extensions.OpenTelemetry
         public TextMapPropagator Propagator { get; set; } = Propagators.DefaultTextMapPropagator;
 
         /// <summary>
+        /// Gets or sets the tag name for namespaces. If null, no tag is created.
+        /// </summary>
+        public string? TagNameNamespace { get; set; } = "temporalNamespace";
+
+        /// <summary>
         /// Gets or sets the tag name for workflow IDs. If null, no tag is created.
         /// </summary>
         public string? TagNameWorkflowId { get; set; } = "temporalWorkflowID";

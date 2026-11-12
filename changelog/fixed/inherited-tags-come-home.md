@@ -1,0 +1,1 @@
+Workflow diagnostic activities created with `TrackWorkflowDiagnosticActivity` now actually carry inherited parent tags on the emitted span, as documented, so workflow outbound spans such as `StartActivity` and `CompleteWorkflow` now include the namespace, workflow ID, and run ID tags.
