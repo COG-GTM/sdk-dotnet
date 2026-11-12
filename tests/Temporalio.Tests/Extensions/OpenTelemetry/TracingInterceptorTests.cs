@@ -651,6 +651,36 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
     }
 
     [Fact]
+    [CloudTestExclusion(
+        CloudTestExclusionReason.NeedsCloudAdaptation,
+        "Requires Cloud Nexus endpoint setup and cleanup.")]
+    public async Task TracingInterceptor_NexusCancel_HasNamespaceTag()
+    {
+        var taskQueue = $"tq-{Guid.NewGuid()}";
+        var endpoint = $"nexus-endpoint-{taskQueue}";
+        await Env.TestEnv.CreateNexusEndpointAsync(endpoint, taskQueue);
+
+        var (_, activities) = await ExecuteTracingWorkflowAsync(
+            new(new[] { new TracingWorkflowAction(CallNexusEndpoint: endpoint, NexusWaitForever: true) }),
+            afterStart: async handle =>
+            {
+                await AssertMore.HasEventEventuallyAsync(
+                    handle, evt => evt.NexusOperationStartedEventAttributes != null);
+                await handle.CancelAsync();
+            },
+            prepareWorkerOptions: workerOptions =>
+            {
+                workerOptions.TaskQueue = taskQueue;
+                workerOptions.AddNexusService(new NexusTracingService());
+            },
+            expectFail: true);
+        var cancelHandler = Assert.Single(
+            activities,
+            a => a.OperationName == "RunCancelNexusOperationHandler:NexusTracingService/WaitForever");
+        Assert.Equal(Client.Options.Namespace, cancelHandler.GetTagItem("temporalNamespace"));
+    }
+
+    [Fact]
     public async Task TracingInterceptor_SignalWithStart_HaveProperSpans()
     {
         var activities = await WithTracingWorkerAsync(async (client, worker) =>
@@ -1175,8 +1205,15 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
                 }
                 if (action.CallNexusEndpoint is { } nexusEndpoint)
                 {
-                    await Workflow.CreateNexusWorkflowClient<INexusTracingService>(nexusEndpoint).
-                        ExecuteNexusOperationAsync(svc => svc.DoSomething());
+                    var nexusClient = Workflow.CreateNexusWorkflowClient<INexusTracingService>(nexusEndpoint);
+                    if (action.NexusWaitForever)
+                    {
+                        await nexusClient.ExecuteNexusOperationAsync(svc => svc.WaitForever());
+                    }
+                    else
+                    {
+                        await nexusClient.ExecuteNexusOperationAsync(svc => svc.DoSomething());
+                    }
                 }
             }
         }
@@ -1311,6 +1348,9 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
     {
         [NexusOperation]
         void DoSomething();
+
+        [NexusOperation]
+        void WaitForever();
     }
 
     [NexusServiceHandler(typeof(INexusTracingService))]
@@ -1323,6 +1363,16 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
                     (TracingWorkflow wf) =>
                         wf.RunAsync(new TracingWorkflowParam(Array.Empty<TracingWorkflowAction>())),
                     new() { Id = $"wf-{Guid.NewGuid()}" }));
+
+        [NexusOperationHandler]
+        public IOperationHandler<NoValue, NoValue> WaitForever()
+        {
+            var param = new TracingWorkflowParam(new[] { new TracingWorkflowAction(WaitUntilSignalCount: 1) });
+            return WorkflowRunOperationHandler.FromHandleFactory(context =>
+                context.StartWorkflowAsync(
+                    (TracingWorkflow wf) => wf.RunAsync(param),
+                    new() { Id = $"wf-{Guid.NewGuid()}" }));
+        }
     }
 
     public record TracingWorkflowParam(
@@ -1338,7 +1388,8 @@ public class TracingInterceptorTests : WorkflowEnvironmentTestBase
         int WaitUntilSignalCount = 0,
         string? CreateCustomActivity = null,
         int WaitUntilUpdateCount = 0,
-        string? CallNexusEndpoint = null);
+        string? CallNexusEndpoint = null,
+        bool NexusWaitForever = false);
 
     public record TracingWorkflowActionChildWorkflow(
         TracingWorkflowParam Param,
